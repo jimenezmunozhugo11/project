@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw
+    database: DEMO
+    schema: RAW
+    tables:
+      - name: country
+      - name: league
+      - name: match
+      - name: team
+      - name: team_attributes
+      - name: player
+      - name: player_attributes
