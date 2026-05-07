@@ -1,9 +1,9 @@
 {{ config(materialized='view') }}
 
--- Se conservan solo preferred_foot y work rates.
--- Los atributos FIFA (overall_rating, crossing, finishing...) se descartan.
--- Se aplica un snapshot: un registro por jugador y temporada
--- usando el más reciente dentro de cada año (ROW_NUMBER).
+-- Only preferred_foot and work rates are kept.
+-- All FIFA attributes (overall_rating, crossing, finishing...) are dropped.
+-- Snapshot applied: one record per player and season
+-- using the most recent within each year (ROW_NUMBER).
 
 WITH source AS (
     SELECT * FROM {{ source('raw', 'player_attributes') }}
@@ -23,7 +23,7 @@ joined_season AS (
             ORDER BY s.date DESC
         )                           AS rn
     FROM source s
-    INNER JOIN {{ ref('stg__season') }} ss
+    INNER JOIN {{ ref('stg_raw__season') }} ss
         ON YEAR(s.date::DATE) = ss.start_year
     WHERE s.preferred_foot IS NOT NULL
 ),
@@ -37,7 +37,7 @@ renamed_casted AS (
         attacking_work_rate,
         defensive_work_rate
     FROM joined_season
-    WHERE rn = 1   -- snapshot: registro más reciente por jugador y temporada
+    WHERE rn = 1   -- snapshot: most recent record per player and season
 )
 
 SELECT * FROM renamed_casted

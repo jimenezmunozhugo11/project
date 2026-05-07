@@ -1,0 +1,468 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Bronze layer. Data loaded directly from the Kaggle SQLite file
+      (European Soccer Database, hugomathien/soccer) without any transformation.
+      Covers European football between 2008 and 2016.
+    database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_BRONZE_DB"
+    schema: RAW
+
+    quoting:
+      database: false
+      schema: false
+      identifier: false
+
+    config:
+      freshness:
+        warn_after:  {count: 7,  period: day}
+        error_after: {count: 10, period: day}
+
+    tables:
+
+      # ----------------------------------------------------------------
+      # STATIC TABLES — no freshness (never change)
+      # ----------------------------------------------------------------
+
+      - name: country
+        description: "Countries where the leagues are held. Static table."
+        config: 
+          freshness: null
+        columns:
+          - name: id
+            description: "Country PK."
+            tests: [not_null, unique]
+          - name: name
+            description: "Name of the country."
+            tests: [not_null]
+
+      - name: league
+        description: "European leagues in the dataset. Static table."
+        config: 
+          freshness: null
+        columns:
+          - name: id
+            description: "League PK."
+            tests: [not_null, unique]
+          - name: country_id
+            description: "FK to country.id."
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('raw', 'country')
+                    field: id
+          - name: name
+            description: "Name of the league."
+            tests: [not_null]
+
+      - name: team
+        description: "Football teams. Almost static — only changes on promotion/relegation."
+        config: 
+          freshness: null
+        columns:
+          - name: id
+            description: "Internal PK."
+            tests: [not_null, unique]
+          - name: team_api_id
+            description: "Main team identifier. Used as FK in match and team_attributes."
+            tests: [not_null, unique]
+          - name: team_fifa_api_id
+            description: "FIFA team ID. Not used in silver."
+          - name: team_long_name
+            description: "Full name of the team."
+            tests: [not_null]
+          - name: team_short_name
+            description: "Team abbreviation (3 letters)."
+
+      # ----------------------------------------------------------------
+      # SEASONAL SNAPSHOT TABLES — update ~once per season
+      # ----------------------------------------------------------------
+
+      - name: team_attributes
+        description: >
+          Team tactical attributes. Updated when the team changes playstyle
+          — approximately once per season.
+        config: 
+          loaded_at_field: date
+          freshness:
+            warn_after:  {count: 30, period: day}
+            error_after: {count: 45, period: day}
+        columns:
+          - name: id
+            description: "Record PK."
+            tests: [not_null, unique]
+          - name: team_api_id
+            description: "FK to team.team_api_id."
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('raw', 'team')
+                    field: team_api_id
+          - name: team_fifa_api_id
+            description: "FIFA team ID. Not used in silver."
+          - name: date
+            description: "Snapshot date. Used for freshness and seasonal snapshot logic."
+            tests: [not_null]
+          - name: buildupplayspeed
+            description: "Build-up play speed (0-100)."
+          - name: buildupplayspeedclass
+            description: "Speed class: Slow / Balanced / Fast."
+          - name: buildupplaydribbling
+            description: "Dribbling tendency in build-up (0-100)."
+          - name: buildupplaydribblingclass
+            description: "Dribbling class: Little / Normal / Lots."
+          - name: buildupplaypassing
+            description: "Passing style in build-up (0-100)."
+          - name: buildupplaypassingclass
+            description: "Passing class: Short / Mixed / Long."
+          - name: buildupplaypositioningclass
+            description: "Positioning in build-up: Organised / Free Form."
+          - name: chancecreationpassing
+            description: "Aggressiveness of creative passes (0-100)."
+          - name: chancecreationpassingclass
+            description: "Passing class: Safe / Normal / Risky."
+          - name: chancecreationcrossing
+            description: "Crossing tendency (0-100)."
+          - name: chancecreationcrossingclass
+            description: "Crossing class: Little / Normal / Lots."
+          - name: chancecreationshooting
+            description: "Shooting tendency (0-100)."
+          - name: chancecreationshootingclass
+            description: "Shooting class: Little / Normal / Lots."
+          - name: chancecreationpositioningclass
+            description: "Positioning in attack: Organised / Free Form."
+          - name: defencepressure
+            description: "Defensive pressure (0-100)."
+          - name: defencepressureclass
+            description: "Pressure class: Deep / Medium / High."
+          - name: defenceaggression
+            description: "Defensive aggression (0-100)."
+          - name: defenceaggressionclass
+            description: "Aggression class: Conservative / Normal / Pressing."
+          - name: defenceteamwidth
+            description: "Defensive team width (0-100)."
+          - name: defenceteamwidthclass
+            description: "Width class: Narrow / Normal / Wide."
+          - name: defencedefenderlineclass
+            description: "Defender line depth: Deep / Normal / High."
+
+      - name: player
+        description: >
+          Player biographical data. No reliable loaded_at column —
+          freshness disabled.
+        config: 
+          freshness: null
+        columns:
+          - name: id
+            description: "Internal PK."
+            tests: [not_null, unique]
+          - name: player_api_id
+            description: "Main player identifier. Used as FK in match and player_attributes."
+            tests: [not_null, unique]
+          - name: player_fifa_api_id
+            description: "FIFA player ID. Not used in silver."
+          - name: player_name
+            description: "Full name of the player."
+            tests: [not_null]
+          - name: birthday
+            description: "Date of birth. Used in silver to calculate age."
+          - name: height
+            description: "Height in centimeters."
+          - name: weight
+            description: "Weight in pounds (Anglo-Saxon origin)."
+
+      - name: player_attributes
+        description: >
+          Player attributes. Source contains full FIFA ratings.
+          In silver only preferred_foot, attacking_work_rate and
+          defensive_work_rate are kept — all FIFA ratings are dropped.
+        config: 
+          loaded_at_field: date
+          freshness:
+            warn_after:  {count: 30, period: day}
+            error_after: {count: 45, period: day}
+        columns:
+          - name: id
+            description: "Record PK."
+            tests: [not_null, unique]
+          - name: player_api_id
+            description: "FK to player.player_api_id."
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('raw', 'player')
+                    field: player_api_id
+          - name: player_fifa_api_id
+            description: "FIFA player ID. Not used in silver."
+          - name: date
+            description: "Snapshot date. Used for seasonal snapshot logic."
+            tests: [not_null]
+          - name: overall_rating
+            description: "FIFA overall rating (0-100). Not used in silver."
+          - name: potential
+            description: "FIFA potential (0-100). Not used in silver."
+          - name: preferred_foot
+            description: "Dominant foot: left / right. Used in silver."
+          - name: attacking_work_rate
+            description: "Offensive work rate: low / medium / high. Used in silver."
+          - name: defensive_work_rate
+            description: "Defensive work rate: low / medium / high. Used in silver."
+          - name: crossing
+            description: "FIFA attribute. Not used in silver."
+          - name: finishing
+            description: "FIFA attribute. Not used in silver."
+          - name: heading_accuracy
+            data_type: number
+          - name: short_passing
+            data_type: number
+          - name: volleys
+            data_type: number
+          - name: dribbling
+            data_type: number
+          - name: curve
+            data_type: number
+          - name: free_kick_accuracy
+            data_type: number
+          - name: long_passing
+            data_type: number
+          - name: ball_control
+            data_type: number
+          - name: acceleration
+            data_type: number
+          - name: sprint_speed
+            data_type: number
+          - name: agility
+            data_type: number
+          - name: reactions
+            data_type: number
+          - name: balance
+            data_type: number
+          - name: shot_power
+            data_type: number
+          - name: jumping
+            data_type: number
+          - name: stamina
+            data_type: number
+          - name: strength
+            data_type: number
+          - name: long_shots
+            data_type: number
+          - name: aggression
+            data_type: number
+          - name: interceptions
+            data_type: number
+          - name: positioning
+            data_type: number
+          - name: vision
+            data_type: number
+          - name: penalties
+            data_type: number
+          - name: marking
+            data_type: number
+          - name: standing_tackle
+            data_type: number
+          - name: sliding_tackle
+            data_type: number
+          - name: gk_diving
+            data_type: number
+          - name: gk_handling
+            data_type: number
+          - name: gk_kicking
+            data_type: number
+          - name: gk_positioning
+            data_type: number
+          - name: gk_reflexes
+            data_type: number
+
+      # ----------------------------------------------------------------
+      # INCREMENTAL TABLE — weekly simulated ingestion
+      # ----------------------------------------------------------------
+
+      - name: match
+        description: >
+          European league matches (2008-2016). Main table of the project.
+          Updated weekly in the incremental ingestion simulation.
+          Columns NOT processed in silver: player coordinates (x/y),
+          XML event columns (goal, card, shoton...) and betting odds
+          from 10 bookmakers (B365, BW, IW, LB, PS, WH, SJ, VC, GB, BS).
+        config: 
+          loaded_at_field: date
+          freshness:
+            warn_after:  {count: 7,  period: day}
+            error_after: {count: 10, period: day}
+        columns:
+          - name: id
+            description: "Match PK."
+            tests: [not_null, unique]
+          - name: country_id
+            description: "FK to country.id."
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('raw', 'country')
+                    field: id
+          - name: league_id
+            description: "FK to league.id."
+            tests:
+              - not_null
+              - relationships:
+                  arguments: 
+                    to: source('raw', 'league')
+                    field: id
+          - name: season
+            description: "Season in '2015/2016' format. Normalized in stg_raw__season."
+            tests: [not_null]
+          - name: stage
+            description: "League matchday."
+          - name: date
+            description: "Match date and time. Used for freshness and incremental logic."
+            tests: [not_null]
+          - name: match_api_id
+            description: "Alternative match ID."
+          - name: home_team_api_id
+            description: "FK to team.team_api_id — home team."
+            tests:
+              - not_null
+              - relationships:
+                  arguments: 
+                    to: source('raw', 'team')
+                    field: team_api_id
+          - name: away_team_api_id
+            description: "FK to team.team_api_id — away team."
+            tests:
+              - not_null
+              - relationships:
+                  arguments: 
+                    to: source('raw', 'team')
+                    field: team_api_id
+          - name: home_team_goal
+            description: "Goals scored by the home team."
+            tests: [not_null]
+          - name: away_team_goal
+            description: "Goals scored by the away team."
+            tests: [not_null]
+          - name: home_player_1
+            description: "player_api_id of home player 1. Processed in stg_raw__match_lineup via UNPIVOT."
+          - name: home_player_2
+            data_type: number
+          - name: home_player_3
+            data_type: number
+          - name: home_player_4
+            data_type: number
+          - name: home_player_5
+            data_type: number
+          - name: home_player_6
+            data_type: number
+          - name: home_player_7
+            data_type: number
+          - name: home_player_8
+            data_type: number
+          - name: home_player_9
+            data_type: number
+          - name: home_player_10
+            data_type: number
+          - name: home_player_11
+            data_type: number
+          - name: away_player_1
+            description: "player_api_id of away player 1. Processed in stg_raw__match_lineup via UNPIVOT."
+          - name: away_player_2
+            data_type: number
+          - name: away_player_3
+            data_type: number
+          - name: away_player_4
+            data_type: number
+          - name: away_player_5
+            data_type: number
+          - name: away_player_6
+            data_type: number
+          - name: away_player_7
+            data_type: number
+          - name: away_player_8
+            data_type: number
+          - name: away_player_9
+            data_type: number
+          - name: away_player_10
+            data_type: number
+          - name: away_player_11
+            data_type: number
+          - name: goal
+            description: "XML with match goals (minute, player, type). Not processed in silver."
+          - name: shoton
+            description: "XML with shots on target. Not processed in silver."
+          - name: shotoff
+            description: "XML with shots off target. Not processed in silver."
+          - name: foulcommit
+            description: "XML with fouls committed. Not processed in silver."
+          - name: card
+            description: "XML with cards (minute and type). Not processed in silver."
+          - name: cross
+            description: "XML with crosses. Not processed in silver."
+          - name: corner
+            description: "XML with corners. Not processed in silver."
+          - name: possession
+            description: "XML with possession by period. Not processed in silver."
+          - name: b365h
+            description: "Bet365 home win odd. Not processed in silver."
+          - name: b365d
+            description: "Bet365 draw odd. Not processed in silver."
+          - name: b365a
+            description: "Bet365 away win odd. Not processed in silver."
+          - name: bwh
+            data_type: number
+          - name: bwd
+            data_type: number
+          - name: bwa
+            data_type: number
+          - name: iwh
+            data_type: number
+          - name: iwd
+            data_type: number
+          - name: iwa
+            data_type: number
+          - name: lbh
+            data_type: number
+          - name: lbd
+            data_type: number
+          - name: lba
+            data_type: number
+          - name: psh
+            data_type: number
+          - name: psd
+            data_type: number
+          - name: psa
+            data_type: number
+          - name: whh
+            data_type: number
+          - name: whd
+            data_type: number
+          - name: wha
+            data_type: number
+          - name: sjh
+            data_type: number
+          - name: sjd
+            data_type: number
+          - name: sja
+            data_type: number
+          - name: vch
+            data_type: number
+          - name: vcd
+            data_type: number
+          - name: vca
+            data_type: number
+          - name: gbh
+            data_type: number
+          - name: gbd
+            data_type: number
+          - name: gba
+            data_type: number
+          - name: bsh
+            data_type: number
+          - name: bsd
+            data_type: number
+          - name: bsa
+            data_type: number

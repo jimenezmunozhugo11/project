@@ -1,8 +1,8 @@
 {{ config(materialized='view') }}
 
--- Los nombres de columna en RAW están en minúsculas sin guiones bajos
--- (buildupplayspeed, defencepressure...) porque así los cargó Snowflake.
--- Aquí se renombran a snake_case y se aplica el snapshot por temporada.
+-- Column names in RAW are all lowercase without underscores
+-- (buildupplayspeed, defencepressure...) as loaded by Snowflake.
+-- Here they are renamed to snake_case and a seasonal snapshot is applied.
 
 WITH source AS (
     SELECT * FROM {{ source('raw', 'team_attributes') }}
@@ -32,10 +32,9 @@ joined_season AS (
             PARTITION BY s.team_api_id, ss.season_id
             ORDER BY s.date DESC
         )                               AS rn
-        -- team_fifa_api_id, buildupplaydribbling y chancecreationcrossing
-        -- se descartan: no se usan en silver
+        -- team_fifa_api_id, buildupplaydribbling and chancecreationcrossing dropped
     FROM source s
-    INNER JOIN {{ ref('stg__season') }} ss
+    INNER JOIN {{ ref('stg_raw__season') }} ss
         ON YEAR(s.date::DATE) = ss.start_year
 ),
 
@@ -59,7 +58,7 @@ renamed_casted AS (
         defence_team_width,
         defence_defender_line_class
     FROM joined_season
-    WHERE rn = 1   -- snapshot: registro más reciente por equipo y temporada
+    WHERE rn = 1   -- snapshot: most recent record per team and season
 )
 
 SELECT * FROM renamed_casted
