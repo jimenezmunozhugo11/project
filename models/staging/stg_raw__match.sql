@@ -7,20 +7,19 @@
     )
 }}
 
--- Tabla principal del proyecto. Materializada como incremental (merge)
--- para simular la ingesta semanal de nuevos partidos.
--- Se descartan: columnas XML (goal, card, shoton...), cuotas de apuestas
--- y coordenadas de posición (x/y). Las columnas de alineación
--- (home_player_1..11) se gestionan en stg_match_lineup.
+-- Main table of the project. Materialized as incremental (merge)
+-- to simulate the weekly ingestion of new matches.
+-- Dropped: XML columns (goal, card, shoton...), betting odds,
+-- position coordinates (x/y) and lineup columns (handled in stg_raw__match_lineup).
 
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'match') }}
+    SELECT * FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'match') }}
     WHERE home_team_api_id IS NOT NULL
       AND away_team_api_id IS NOT NULL
 
     {% if is_incremental() %}
-        -- En cargas incrementales solo procesa partidos más recientes
-        -- que el último match_date ya cargado en la tabla
+        -- Incremental loads only process matches newer than the
+        -- latest match_date already loaded in the table
         AND date::DATE > (SELECT MAX(match_date) FROM {{ this }})
     {% endif %}
 ),
