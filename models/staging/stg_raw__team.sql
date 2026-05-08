@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'team') }}
+    SELECT * FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'team') }}
 ),
 
 renamed_casted AS (

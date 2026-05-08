@@ -13,7 +13,7 @@
 -- position coordinates (x/y) and lineup columns (handled in stg_raw__match_lineup).
 
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'match') }}
+    SELECT * FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'match') }}
     WHERE home_team_api_id IS NOT NULL
       AND away_team_api_id IS NOT NULL
 

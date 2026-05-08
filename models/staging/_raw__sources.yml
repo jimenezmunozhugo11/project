@@ -1,13 +1,13 @@
 version: 2
 
 sources:
-  - name: raw
+  - name: EUROPEAN_SOCCER_DATABASE
     description: >
       Bronze layer. Data loaded directly from the Kaggle SQLite file
       (European Soccer Database, hugomathien/soccer) without any transformation.
       Covers European football between 2008 and 2016.
-    database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_BRONZE_DB"
-    schema: RAW
+    database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_BRONZE_SOCCER_DB"
+    schema: EUROPEAN_SOCCER_DATABASE
 
     quoting:
       database: false
@@ -51,7 +51,7 @@ sources:
               - not_null
               - relationships:
                   arguments:
-                    to: source('raw', 'country')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'country')
                     field: id
           - name: name
             description: "Name of the league."
@@ -99,7 +99,7 @@ sources:
               - not_null
               - relationships:
                   arguments:
-                    to: source('raw', 'team')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'team')
                     field: team_api_id
           - name: team_fifa_api_id
             description: "FIFA team ID. Not used in silver."
@@ -141,13 +141,13 @@ sources:
           - name: defenceaggression
             description: "Defensive aggression (0-100)."
           - name: defenceaggressionclass
-            description: "Aggression class: Conservative / Normal / Pressing."
+            description: "Aggression class: Contain / Double / Press."
           - name: defenceteamwidth
             description: "Defensive team width (0-100)."
           - name: defenceteamwidthclass
             description: "Width class: Narrow / Normal / Wide."
           - name: defencedefenderlineclass
-            description: "Defender line depth: Deep / Normal / High."
+            description: "Defender line depth: Cover / Offside Trap."
 
       - name: player
         description: >
@@ -194,7 +194,7 @@ sources:
               - not_null
               - relationships:
                   arguments:
-                    to: source('raw', 'player')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'player')
                     field: player_api_id
           - name: player_fifa_api_id
             description: "FIFA player ID. Not used in silver."
@@ -304,7 +304,7 @@ sources:
               - not_null
               - relationships:
                   arguments:
-                    to: source('raw', 'country')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'country')
                     field: id
           - name: league_id
             description: "FK to league.id."
@@ -312,7 +312,7 @@ sources:
               - not_null
               - relationships:
                   arguments: 
-                    to: source('raw', 'league')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'league')
                     field: id
           - name: season
             description: "Season in '2015/2016' format. Normalized in stg_raw__season."
@@ -330,7 +330,7 @@ sources:
               - not_null
               - relationships:
                   arguments: 
-                    to: source('raw', 'team')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'team')
                     field: team_api_id
           - name: away_team_api_id
             description: "FK to team.team_api_id — away team."
@@ -338,7 +338,7 @@ sources:
               - not_null
               - relationships:
                   arguments: 
-                    to: source('raw', 'team')
+                    to: source('EUROPEAN_SOCCER_DATABASE', 'team')
                     field: team_api_id
           - name: home_team_goal
             description: "Goals scored by the home team."

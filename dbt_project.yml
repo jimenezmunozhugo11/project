@@ -12,7 +12,7 @@ profile: 'default'
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
-model-paths: ["models, semantic_models"]
+model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
 seed-paths: ["seeds"]
@@ -38,12 +38,12 @@ clean-targets:         # directories to be removed by `dbt clean`
 models:
   football_project:
     staging:
-      +database: DEMO
-      +schema: staging
+      +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
+      +schema: EUROPEAN_SOCCER_DATABASE
       +materialized: view
 
     marts:
-      +database: DEMO
-      +schema: marts
+      +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_GOLD_SOCCER_DB"
+      +schema: EUROPEAN_SOCCER_DATABASE
       +materialized: table
 

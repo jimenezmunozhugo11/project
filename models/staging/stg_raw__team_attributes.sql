@@ -5,7 +5,7 @@
 -- Here they are renamed to snake_case and a seasonal snapshot is applied.
 
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'team_attributes') }}
+    SELECT * FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'team_attributes') }}
 ),
 
 joined_season AS (

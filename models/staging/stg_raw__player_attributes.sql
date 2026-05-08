@@ -6,7 +6,7 @@
 -- using the most recent within each year (ROW_NUMBER).
 
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'player_attributes') }}
+    SELECT * FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'player_attributes') }}
 ),
 
 joined_season AS (
@@ -16,8 +16,22 @@ joined_season AS (
         ss.season_id                AS season_id,
         s.date::DATE                AS attr_date,
         s.preferred_foot            AS preferred_foot,
-        s.attacking_work_rate       AS attacking_work_rate,
-        s.defensive_work_rate       AS defensive_work_rate,
+        CASE LOWER(TRIM(s.attacking_work_rate))
+            WHEN 'high'   THEN 'high'
+            WHEN 'medium' THEN 'medium'
+            WHEN 'med'    THEN 'medium'
+            WHEN 'norm'   THEN 'medium'
+            WHEN 'low'    THEN 'low'
+            ELSE NULL
+        END AS attacking_work_rate,
+        CASE LOWER(TRIM(s.defensive_work_rate))
+            WHEN 'high'   THEN 'high'
+            WHEN 'medium' THEN 'medium'
+            WHEN 'med'    THEN 'medium'
+            WHEN 'norm'   THEN 'medium'
+            WHEN 'low'    THEN 'low'
+            ELSE NULL
+        END AS defensive_work_rate,
         ROW_NUMBER() OVER (
             PARTITION BY s.player_api_id, ss.season_id
             ORDER BY s.date DESC

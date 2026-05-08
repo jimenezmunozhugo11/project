@@ -166,19 +166,19 @@ models:
       - name: defence_aggression
         description: "Defensive aggression (0-100)."
       - name: defence_aggression_class
-        description: "Aggression class: Conservative / Normal / Pressing."
+        description: "Aggression class: Contain / Double / Press."
         tests:
           - accepted_values:
               arguments:
-                values: ['Conservative', 'Normal', 'Pressing']
+                values: ['Contain', 'Double', 'Press']
       - name: defence_team_width
         description: "Defensive team width (0-100)."
       - name: defence_defender_line_class
-        description: "Defender line depth: Deep / Normal / High."
+        description: "Defender line depth: Cover / Offside Trap."
         tests:
           - accepted_values:
               arguments:
-                values: ['Deep', 'Normal', 'High']
+                values: ['Cover', 'Offside Trap']
 
   - name: stg_raw__player_attributes
     description: >

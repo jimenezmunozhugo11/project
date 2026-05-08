@@ -5,7 +5,7 @@
  
 WITH source AS (
     SELECT DISTINCT season
-    FROM {{ source('raw', 'match') }}
+    FROM {{ source('EUROPEAN_SOCCER_DATABASE', 'match') }}
     WHERE season IS NOT NULL
 ),
  
