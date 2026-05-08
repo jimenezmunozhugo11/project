@@ -14,3 +14,5 @@ SELECT
     home_points + away_points AS total_points
 FROM {{ ref('fct_match_result') }}
 WHERE home_points + away_points NOT IN (2, 3)
+    OR home_points IS NULL
+   OR away_points IS NULL
