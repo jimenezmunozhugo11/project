@@ -66,10 +66,10 @@ models:
       - name: age
         description: "Age calculated in dbt using DATEDIFF('year', birthday, CURRENT_DATE())."
         tests: [not_null]
-      - name: height
-        description: "Height in centimeters."
-      - name: weight
-        description: "Weight in pounds (Anglo-Saxon origin of the dataset)."
+      - name: height_cm
+        description: "Height in centimeters, rounded to the nearest integer."
+      - name: weight_kg
+        description: "Weight in kilograms, converted from pounds (x 0.453592) and rounded."
 
   # ----------------------------------------------------------------
   # DERIVED TABLES

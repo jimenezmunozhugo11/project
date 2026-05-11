@@ -26,8 +26,8 @@ renamed_casted AS (
         p.player_name                                                                  AS player_name,
         p.birthday                                                                     AS birthday,
         p.age                                                                          AS age,
-        p.height                                                                       AS height,
-        p.weight                                                                       AS weight,
+        p.height_cm                                                                    AS height,
+        p.weight_kg                                                                    AS weight,
         pa.preferred_foot                                                              AS preferred_foot,
         pa.attacking_work_rate                                                         AS attacking_work_rate,
         pa.defensive_work_rate                                                         AS defensive_work_rate
