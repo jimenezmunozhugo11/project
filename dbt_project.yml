@@ -47,3 +47,8 @@ models:
       +schema: EUROPEAN_SOCCER_DATABASE
       +materialized: table
 
+snapshots:
+  football_project:
+    +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
+    +schema: SNAPSHOTS
+    +target_schema: SNAPSHOTS
