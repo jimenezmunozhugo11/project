@@ -378,15 +378,6 @@ models:
           - name: away_win_rate
             alias: away_wr
 
-#      - name: total_goals_l30d
-#        label: Total goals last 30 days
-#        type: cumulative
-#        type_params:
-#          measure:
-#            name: total_goals
-#          cumulative_type_params:
-#            window: 30 days
-
   # ----------------------------------------------------------------
 
   - name: fct_team_season_stats
@@ -538,4 +529,135 @@ models:
             alias: scored
           - name: total_goals_against
             alias: conceded
-        
+
+  # ----------------------------------------------------------------
+  # ANALYSES
+  # ----------------------------------------------------------------
+
+  - name: uc5_team_consistency
+    description: Team consistency analysis. One record per team and season. Measures goal-scoring variance using STDDEV to classify teams as consistent (low std dev) or erratic (high std dev). Source — fct_match_result unpivoted into one row per team per match. Only teams with 10+ matches per season are included.
+
+    columns:
+      - name: league_name
+        description: Full name of the league — sourced from dim_league.
+        tests: [not_null]
+
+      - name: season
+        description: Season name in '2015/2016' format — sourced from dim_season.
+        tests: [not_null]
+
+      - name: team_long_name
+        description: Full name of the team — sourced from dim_team.
+        tests: [not_null]
+
+      - name: matches_played
+        description: Total matches played by the team in the season. Minimum 10 (enforced by HAVING).
+        tests: [not_null]
+
+      - name: avg_goals_per_match
+        description: Average goals scored per match in the season.
+
+      - name: stddev_goals
+        description: Standard deviation of goals scored per match. Low value = consistent scorer, high value = erratic scorer.
+
+      - name: min_goals_in_a_match
+        description: Fewest goals scored in a single match during the season.
+
+      - name: max_goals_in_a_match
+        description: Most goals scored in a single match during the season.
+
+      - name: rank_most_consistent
+        description: Rank within league + season by stddev_goals ASC. 1 = most consistent team (lowest dispersion).
+
+      - name: rank_most_erratic
+        description: Rank within league + season by stddev_goals DESC. 1 = most erratic team (highest dispersion).
+
+    metrics:
+      - name: avg_stddev_goals
+        label: Average goal-scoring std dev
+        type: simple
+        agg: average
+        expr: stddev_goals
+
+      - name: avg_goals_scored
+        label: Average goals scored per match
+        type: simple
+        agg: average
+        expr: avg_goals_per_match
+
+  - name: uc6_team_evolution
+    description: Team season-over-season evolution. One record per team and season. Uses LAG() to compute year-over-year deltas in points, goals scored, goals conceded and league position. NULL deltas are expected for a team's first season. Sources — fct_team_season_stats, dim_team, dim_season, dim_league.
+
+    columns:
+      - name: league_name
+        description: Full name of the league — sourced from dim_league.
+        tests: [not_null]
+
+      - name: team_long_name
+        description: Full name of the team — sourced from dim_team.
+        tests: [not_null]
+
+      - name: season
+        description: Season name in '2015/2016' format — sourced from dim_season.
+        tests: [not_null]
+
+      - name: matches_played
+        description: Total matches played by the team in the season.
+        tests: [not_null]
+
+      - name: points
+        description: Total points earned in the season.
+        tests: [not_null]
+
+      - name: points_delta
+        description: Points difference vs the previous season in the same league. Positive = improvement. NULL for a team's first season.
+
+      - name: goals_for
+        description: Total goals scored in the season.
+        tests: [not_null]
+
+      - name: goals_for_delta
+        description: Goals scored difference vs the previous season. Positive = more goals. NULL for a team's first season.
+
+      - name: goals_against
+        description: Total goals conceded in the season.
+        tests: [not_null]
+
+      - name: goals_against_delta
+        description: Goals conceded difference vs the previous season. Negative = fewer goals conceded (improvement). NULL for a team's first season.
+
+      - name: goal_difference
+        description: Season goal difference (goals_for - goals_against).
+        tests: [not_null]
+
+      - name: wins
+        description: Total wins in the season.
+        tests: [not_null]
+
+      - name: draws
+        description: Total draws in the season.
+        tests: [not_null]
+
+      - name: losses
+        description: Total losses in the season.
+        tests: [not_null]
+
+      - name: league_position
+        description: Final league position in the season ranked by points DESC, goal_difference DESC.
+        tests: [not_null]
+
+      - name: position_delta
+        description: Position change vs the previous season. Negative = climbed the table. NULL for a team's first season.
+
+    metrics:
+      - name: avg_points_delta
+        label: Average points delta season over season
+        type: simple
+        agg: average
+        expr: points_delta
+
+      - name: avg_position_delta
+        label: Average position delta season over season
+        type: simple
+        agg: average
+        expr: position_delta
