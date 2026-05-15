@@ -1,54 +1,89 @@
+# ==============================================================================
+# dbt_project.yml — football_project
+# ==============================================================================
+# Central configuration file for the dbt project.
+# Defines project metadata, file paths, model materializations and
+# database/schema routing per layer.
+#
+# Layers:
+#   staging  → {ENV}_SILVER_SOCCER_DB.EUROPEAN_SOCCER_DATABASE  (views)
+#   marts    → {ENV}_GOLD_SOCCER_DB.EUROPEAN_SOCCER_DATABASE    (tables)
+#   snapshots→ {ENV}_SILVER_SOCCER_DB.SNAPSHOTS                 (SCD2)
+#
+# Environment:
+#   The DBT_ENVIRONMENTS env var controls the database prefix (e.g. DEV, PRD).
+#   If the variable is not set, all database references resolve to FAIL_*
+#   to make misconfiguration immediately visible rather than silently writing
+#   to an unintended database.
+# ==============================================================================
 
-# Name your project! Project names should contain only lowercase characters
-# and underscores. A good package name should reflect your organization's
-# name or the intended use of these models
 name: 'football_project'
 version: '1.0.0'
 config-version: 2
 
-# This setting configures which "profile" dbt uses for this project.
+# Profile used to connect to Snowflake.
+# Defined in ~/.dbt/profiles.yml — not committed to version control.
 profile: 'default'
 
-# These configurations specify where dbt should look for different types of files.
-# The `model-paths` config, for example, states that models in this project can be
-# found in the "models/" directory. You probably won't need to change these!
-model-paths: ["models"]
+# File path configuration — standard dbt layout, no customisation needed.
+model-paths:    ["models"]
 analysis-paths: ["analyses"]
-test-paths: ["tests"]
-seed-paths: ["seeds"]
-macro-paths: ["macros"]
+test-paths:     ["tests"]
+seed-paths:     ["seeds"]
+macro-paths:    ["macros"]
 snapshot-paths: ["snapshots"]
 
-target-path: "target"  # directory which will store compiled SQL files
-clean-targets:         # directories to be removed by `dbt clean`
-  - "target"
-  - "dbt_packages"
+# Compiled SQL output directory (gitignored).
+target-path: "target"
+
+# Directories removed by `dbt clean`.
+clean-targets:
+  - "target"       # compiled SQL and run artifacts
+  - "dbt_packages" # installed dbt packages (reinstalled via `dbt deps`)
 
 
-# Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
-
-# In dbt, the default materialization for a model is a view. This means, when you run 
-# dbt run or dbt build, all of your models will be built as a view in your data platform. 
-# The configuration below will override this setting for models in the example folder to 
-# instead be materialized as tables. Any models you add to the root of the models folder will 
-# continue to be built as views. These settings can be overridden in the individual model files
-# using the `{{ config(...) }}` macro.
+# ==============================================================================
+# Model configuration
+# ==============================================================================
+# Materializations and database/schema targets are set per layer here so that
+# individual model files only need to override when they differ from the default
+# (e.g. fct_match_result overrides to incremental at the model level).
+#
+# DBT_ENVIRONMENTS drives the database prefix:
+#   DEV  → DEV_SILVER_SOCCER_DB  / DEV_GOLD_SOCCER_DB
+#   PRO  → PRO_SILVER_SOCCER_DB  / PRO_GOLD_SOCCER_DB
+# ==============================================================================
 
 models:
   football_project:
+
     staging:
-      +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
-      +schema: EUROPEAN_SOCCER_DATABASE
+      # Silver layer — cleaned and renamed source data.
+      # Default: view (no storage cost; queries always reflect latest source).
+      # Override to incremental at model level: stg_raw__match.
+      +database:     "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
+      +schema:       EUROPEAN_SOCCER_DATABASE
       +materialized: view
 
     marts:
-      +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_GOLD_SOCCER_DB"
-      +schema: EUROPEAN_SOCCER_DATABASE
+      # Gold layer — dimensional models and fact tables ready for analysis.
+      # Default: table (pre-computed for query performance).
+      # Override to incremental at model level: fct_match_result.
+      +database:     "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_GOLD_SOCCER_DB"
+      +schema:       EUROPEAN_SOCCER_DATABASE
       +materialized: table
+
+
+# ==============================================================================
+# Snapshot configuration
+# ==============================================================================
+# SCD2 snapshots land in the silver layer under a dedicated SNAPSHOTS schema
+# to keep them separate from the staging models.
+# Covers: team_attributes_snapshot, player_attributes_snapshot.
+# ==============================================================================
 
 snapshots:
   football_project:
-    +database: "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
-    +schema: SNAPSHOTS
-    +target_schema: SNAPSHOTS
+    +database:       "{{ env_var('DBT_ENVIRONMENTS', 'FAIL') }}_SILVER_SOCCER_DB"
+    +schema:         SNAPSHOTS
+    +target_schema:  SNAPSHOTS

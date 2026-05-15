@@ -1,3 +1,14 @@
+-- ============================================================================
+-- generate_schema_name — Returns the target schema name for a given node
+-- ============================================================================
+-- Usage:
+--   {{ generate_schema_name('my_custom_schema', node) }}
+--
+-- Returns:
+--   custom_schema_name — if a custom name is provided (not none)
+--   target.schema      — fallback to the default target schema
+-- ============================================================================
+
 {% macro generate_schema_name(
     custom_schema_name, node
 ) -%}
