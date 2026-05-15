@@ -7,23 +7,29 @@ models:
   # ----------------------------------------------------------------
 
   - name: stg_raw__country
-    description: "Countries where the leagues are held. Generated from RAW.country."
+    description: >
+      Country reference table. One record per country.
+      Sourced directly from RAW.country with no transformations
+      beyond column renaming and type casting.
     columns:
       - name: country_id
-        description: "Country PK."
+        description: Natural PK from the source system — identifies the country uniquely.
         tests: [not_null, unique]
       - name: country_name
-        description: "Name of the country."
+        description: Full country name in English (e.g. Spain, England, Germany).
         tests: [not_null]
 
   - name: stg_raw__league
-    description: "European leagues in the dataset. Generated from RAW.league."
+    description: >
+      European leagues included in the dataset. One record per league.
+      Sourced from RAW.league and enriched with a FK to stg_raw__country.
+      Covers 11 leagues across 11 countries.
     columns:
       - name: league_id
-        description: "League PK."
+        description: Natural PK from the source system — identifies the league uniquely.
         tests: [not_null, unique]
       - name: country_id
-        description: "FK to stg_raw__country.country_id."
+        description: FK to stg_raw__country.country_id — links the league to its host country.
         tests:
           - not_null
           - relationships:
@@ -31,45 +37,64 @@ models:
                 to: ref('stg_raw__country')
                 field: country_id
       - name: league_name
-        description: "Name of the league."
+        description: Full official league name (e.g. Spain LIGA BBVA, England Premier League).
         tests: [not_null]
 
   - name: stg_raw__team
-    description: "Football teams. Generated from RAW.team."
+    description: >
+      Football teams present in the dataset. One record per team.
+      Sourced from RAW.team. Contains two identifiers — team_id
+      (internal PK) and team_api_id (the main join key used across
+      the rest of the project).
     columns:
       - name: team_id
-        description: "Internal team PK."
+        description: Internal surrogate PK from the source system — not used as a join key downstream.
         tests: [not_null, unique]
       - name: team_api_id
-        description: "Main team identifier. Used as FK in stg_raw__match and stg_raw__team_attributes."
+        description: >
+          Main team identifier used as FK in stg_raw__match and
+          stg_raw__team_attributes. This is the join key for all
+          team-related relationships in the project.
         tests: [not_null, unique]
       - name: team_long_name
-        description: "Full name of the team."
+        description: Full official team name (e.g. Real Madrid CF, FC Barcelona).
         tests: [not_null]
       - name: team_short_name
-        description: "Team abbreviation (3 letters)."
+        description: Three-letter team abbreviation used in match displays (e.g. RMA, FCB).
 
   - name: stg_raw__player
-    description: "Player biographical data. Generated from RAW.player."
+    description: >
+      Player biographical data. One record per player.
+      Sourced from RAW.player. Contains only biographical attributes —
+      play style attributes (work rates, preferred foot) are stored
+      separately in stg_raw__player_attributes. FIFA ratings are
+      excluded from this project entirely.
     columns:
       - name: player_id
-        description: "Internal player PK."
+        description: Internal surrogate PK from the source system — not used as a join key downstream.
         tests: [not_null, unique]
       - name: player_api_id
-        description: "Main player identifier. Used as FK in stg_raw__match_lineup and stg_raw__player_attributes."
+        description: >
+          Main player identifier used as FK in stg_raw__player_attributes.
+          This is the join key for all player-related relationships in the project.
         tests: [not_null, unique]
       - name: player_name
-        description: "Full name of the player."
+        description: Full player name as recorded in the source system.
         tests: [not_null]
       - name: birthday
-        description: "Date of birth. Cast to DATE from TIMESTAMP_NTZ."
+        description: Player's date of birth — cast to DATE from the original TIMESTAMP_NTZ in the source.
       - name: age
-        description: "Age calculated in dbt using DATEDIFF('year', birthday, CURRENT_DATE())."
+        description: >
+          Player's age in full years, calculated in dbt using
+          DATEDIFF('year', birthday, CURRENT_DATE()). Computed at
+          staging time, not at season snapshot time.
         tests: [not_null]
       - name: height_cm
-        description: "Height in centimeters, rounded to the nearest integer."
+        description: Player's height in centimetres, rounded to the nearest integer.
       - name: weight_kg
-        description: "Weight in kilograms, converted from pounds (x 0.453592) and rounded."
+        description: >
+          Player's weight in kilograms, converted from pounds
+          (source value × 0.453592) and rounded to the nearest integer.
 
   # ----------------------------------------------------------------
   # DERIVED TABLES
@@ -77,20 +102,25 @@ models:
 
   - name: stg_raw__season
     description: >
-      Unique seasons derived from the season field in RAW.match.
-      Does not exist as a table in RAW — generated with SELECT DISTINCT.
+      Season reference table derived from the source — RAW.season
+      does not exist as a standalone table. Generated using
+      SELECT DISTINCT on the season field of RAW.match.
+      One record per unique season across all leagues (8 seasons total:
+      2008/2009 → 2015/2016).
     columns:
       - name: season_id
-        description: "PK generated with ROW_NUMBER() ordered by season_name."
+        description: >
+          Surrogate PK generated with ROW_NUMBER() ordered by season_name ASC.
+          Stable as long as no new seasons are added to the source.
         tests: [not_null, unique]
       - name: season_name
-        description: "Season name in '2015/2016' format."
+        description: Season label in 'YYYY/YYYY' format (e.g. 2015/2016). Natural key from RAW.match.
         tests: [not_null, unique]
       - name: start_year
-        description: "Season start year. Extracted with SPLIT_PART."
+        description: Four-digit season start year extracted with SPLIT_PART(season_name, '/', 1).
         tests: [not_null]
       - name: end_year
-        description: "Season end year. Extracted with SPLIT_PART."
+        description: Four-digit season end year extracted with SPLIT_PART(season_name, '/', 2).
         tests: [not_null]
 
   # ----------------------------------------------------------------
@@ -99,16 +129,19 @@ models:
 
   - name: stg_raw__team_attributes
     description: >
-      Team tactical attributes. One record per team and season
-      (snapshot of the most recent record within the year). Generated from RAW.team_attributes
-      with a JOIN to stg_raw__season and ROW_NUMBER() for the snapshot.
-      Dropped columns: team_fifa_api_id, buildupplaydribbling and chancecreationcrossing.
+      Team tactical attributes at team-season grain. One record per
+      team per season — deduplication is applied via ROW_NUMBER() to
+      retain only the most recent record within each calendar year,
+      then joined to stg_raw__season to resolve the season_id FK.
+      Sourced from RAW.team_attributes.
+      Dropped columns: team_fifa_api_id, buildupplaydribbling,
+      chancecreationcrossing (out of project scope).
     columns:
       - name: team_attr_id
-        description: "Attributes record PK."
+        description: Natural PK from the source system — uniquely identifies one attributes record.
         tests: [not_null, unique]
       - name: team_api_id
-        description: "FK to stg_raw__team.team_api_id."
+        description: FK to stg_raw__team.team_api_id — identifies the team these attributes belong to.
         tests:
           - not_null
           - relationships:
@@ -116,7 +149,7 @@ models:
                 to: ref('stg_raw__team')
                 field: team_api_id
       - name: season_id
-        description: "FK to stg_raw__season.season_id."
+        description: FK to stg_raw__season.season_id — identifies the season this snapshot was taken in.
         tests:
           - not_null
           - relationships:
@@ -124,57 +157,57 @@ models:
                 to: ref('stg_raw__season')
                 field: season_id
       - name: buildup_play_speed
-        description: "Build-up play speed (0-100)."
+        description: Numeric score (0–100) indicating how quickly the team transitions from defence to attack.
       - name: buildup_play_speed_class
-        description: "Speed class: Slow / Balanced / Fast."
+        description: "Categorical label derived from buildup_play_speed — Slow / Balanced / Fast."
         tests:
           - accepted_values:
               arguments:
                 values: ['Slow', 'Balanced', 'Fast']
       - name: buildup_play_passing
-        description: "Passing style during build-up (0-100)."
+        description: Numeric score (0–100) indicating the team's preferred passing length during build-up.
       - name: buildup_play_passing_class
-        description: "Passing class: Short / Mixed / Long."
+        description: "Categorical label derived from buildup_play_passing — Short / Mixed / Long."
         tests:
           - accepted_values:
               arguments:
                 values: ['Short', 'Mixed', 'Long']
       - name: chance_creation_passing
-        description: "Aggressiveness of creative passes (0-100)."
+        description: Numeric score (0–100) indicating the aggressiveness of creative passing in the final third.
       - name: chance_creation_passing_class
-        description: "Passing class: Safe / Normal / Risky."
+        description: "Categorical label derived from chance_creation_passing — Safe / Normal / Risky."
         tests:
           - accepted_values:
               arguments:
                 values: ['Safe', 'Normal', 'Risky']
       - name: chance_creation_shooting
-        description: "Tendency to shoot (0-100)."
+        description: Numeric score (0–100) indicating the team's tendency to attempt a shot when in position.
       - name: chance_creation_shooting_class
-        description: "Shooting class: Little / Normal / Lots."
+        description: "Categorical label derived from chance_creation_shooting — Little / Normal / Lots."
         tests:
           - accepted_values:
               arguments:
                 values: ['Little', 'Normal', 'Lots']
       - name: defence_pressure
-        description: "Defensive pressure (0-100)."
+        description: Numeric score (0–100) indicating how high up the pitch the team applies defensive pressure.
       - name: defence_pressure_class
-        description: "Pressure class: Deep / Medium / High."
+        description: "Categorical label derived from defence_pressure — Deep / Medium / High."
         tests:
           - accepted_values:
               arguments:
                 values: ['Deep', 'Medium', 'High']
       - name: defence_aggression
-        description: "Defensive aggression (0-100)."
+        description: Numeric score (0–100) indicating the physical intensity of the team's defensive challenges.
       - name: defence_aggression_class
-        description: "Aggression class: Contain / Double / Press."
+        description: "Categorical label derived from defence_aggression — Contain / Double / Press."
         tests:
           - accepted_values:
               arguments:
                 values: ['Contain', 'Double', 'Press']
       - name: defence_team_width
-        description: "Defensive team width (0-100)."
+        description: Numeric score (0–100) indicating how wide the team's defensive shape is — higher = wider.
       - name: defence_defender_line_class
-        description: "Defender line depth: Cover / Offside Trap."
+        description: "Categorical label for the defensive line depth — Cover (deeper) / Offside Trap (higher line)."
         tests:
           - accepted_values:
               arguments:
@@ -182,16 +215,20 @@ models:
 
   - name: stg_raw__player_attributes
     description: >
-      Reduced player attributes. One record per player and season
-      (snapshot of the most recent record within the year). All FIFA
-      attributes (overall_rating, crossing, finishing...) are dropped —
-      only preferred_foot, attacking_work_rate and defensive_work_rate are kept.
+      Reduced player attributes at player-season grain. One record per
+      player per season — deduplication applied via ROW_NUMBER() to
+      retain only the most recent record within each calendar year.
+      Sourced from RAW.player_attributes.
+      All FIFA rating columns (overall_rating, crossing, finishing,
+      and all derived skill scores) are dropped — only the three
+      play style attributes relevant to this project are retained:
+      preferred_foot, attacking_work_rate, defensive_work_rate.
     columns:
       - name: player_attr_id
-        description: "Attributes record PK."
+        description: Natural PK from the source system — uniquely identifies one attributes record.
         tests: [not_null, unique]
       - name: player_api_id
-        description: "FK to stg_raw__player.player_api_id."
+        description: FK to stg_raw__player.player_api_id — identifies the player these attributes belong to.
         tests:
           - not_null
           - relationships:
@@ -199,7 +236,7 @@ models:
                 to: ref('stg_raw__player')
                 field: player_api_id
       - name: season_id
-        description: "FK to stg_raw__season.season_id."
+        description: FK to stg_raw__season.season_id — identifies the season this snapshot was taken in.
         tests:
           - not_null
           - relationships:
@@ -207,19 +244,19 @@ models:
                 to: ref('stg_raw__season')
                 field: season_id
       - name: preferred_foot
-        description: "Player's dominant foot."
+        description: Player's dominant foot — either 'left' or 'right'.
         tests:
           - accepted_values:
               arguments:
                 values: ['left', 'right']
       - name: attacking_work_rate
-        description: "Player's offensive work rate."
+        description: Player's tendency to contribute offensively — low / medium / high.
         tests:
           - accepted_values:
               arguments:
                 values: ['low', 'medium', 'high']
       - name: defensive_work_rate
-        description: "Player's defensive work rate."
+        description: Player's tendency to track back and defend — low / medium / high.
         tests:
           - accepted_values:
               arguments:
@@ -231,17 +268,20 @@ models:
 
   - name: stg_raw__match
     description: >
-      European league matches (2008-2016). Main table of the project.
-      Materialized as incremental with merge strategy on match_id.
-      Dropped columns: XML columns (goal, card...), betting odds and
-      player position coordinates (x/y). Lineup columns are
-      handled in stg_raw__match_lineup.
+      European league matches from 2008 to 2016. The main fact source
+      of the project. One record per match. Sourced from RAW.match and
+      materialized as incremental (merge on match_id) to process only
+      new matches on each run.
+      Dropped columns: XML event columns (goal, card, shoton...),
+      all betting odds columns, player position coordinates (x/y).
+      The 22 player lineup columns (home_player_1..11,
+      away_player_1..11) are handled separately in stg_raw__match_lineup.
     columns:
       - name: match_id
-        description: "Match PK."
+        description: Natural PK from the source system — uniquely identifies one match.
         tests: [not_null, unique]
       - name: country_id
-        description: "FK to stg_raw__country.country_id."
+        description: FK to stg_raw__country.country_id — identifies the country where the match was played.
         tests:
           - not_null
           - relationships:
@@ -249,7 +289,7 @@ models:
                 to: ref('stg_raw__country')
                 field: country_id
       - name: league_id
-        description: "FK to stg_raw__league.league_id."
+        description: FK to stg_raw__league.league_id — identifies the competition this match belongs to.
         tests:
           - not_null
           - relationships:
@@ -257,16 +297,23 @@ models:
                 to: ref('stg_raw__league')
                 field: league_id
       - name: season_name
-        description: "Season in '2015/2016' format. Joined with stg_raw__season in marts."
+        description: >
+          Season label in 'YYYY/YYYY' format (e.g. 2015/2016).
+          Not resolved to a season_sk at staging layer — the FK join
+          to stg_raw__season is performed in the marts layer.
         tests: [not_null]
       - name: stage
-        description: "League matchday."
+        description: League matchday number within the season (e.g. 1 = opening round).
         tests: [not_null]
       - name: match_date
-        description: "Match date. Cast to DATE. Used for incremental logic."
+        description: >
+          Calendar date on which the match was played. Cast to DATE
+          from the source DATETIME. Used as the incremental filter key —
+          only rows with match_date greater than MAX(match_date) in the
+          target table are processed on incremental runs.
         tests: [not_null]
       - name: home_team_id
-        description: "FK to stg_raw__team.team_api_id — home team."
+        description: FK to stg_raw__team.team_api_id — identifies the home team.
         tests:
           - not_null
           - relationships:
@@ -274,7 +321,7 @@ models:
                 to: ref('stg_raw__team')
                 field: team_api_id
       - name: away_team_id
-        description: "FK to stg_raw__team.team_api_id — away team."
+        description: FK to stg_raw__team.team_api_id — identifies the away team.
         tests:
           - not_null
           - relationships:
@@ -282,10 +329,10 @@ models:
                 to: ref('stg_raw__team')
                 field: team_api_id
       - name: home_goals
-        description: "Goals scored by the home team."
+        description: Number of goals scored by the home team. Sourced from RAW.match.home_team_goal.
         tests: [not_null]
       - name: away_goals
-        description: "Goals scored by the away team."
+        description: Number of goals scored by the away team. Sourced from RAW.match.away_team_goal.
         tests: [not_null]
 
   # ----------------------------------------------------------------
@@ -294,16 +341,18 @@ models:
 
   - name: stg_raw__match_lineup
     description: >
-      Bridge table between players and teams. Generated with UNPIVOT of the
-      22 columns home_player_1..11 and away_player_1..11 from RAW.match.
-      Without this table it is not possible to relate stg_raw__player to stg_raw__team.
-      One record per player appearing in each match lineup.
+      Bridge table between matches, teams and players. One record per
+      player appearance in a match lineup. Generated by unpivoting the
+      22 player columns (home_player_1..11 and away_player_1..11) from
+      RAW.match into a normalised long format. Without this table it is
+      not possible to relate stg_raw__player to stg_raw__team directly —
+      this is the only model that establishes that many-to-many relationship.
     columns:
       - name: lineup_id
-        description: "Surrogate PK generated with ROW_NUMBER()."
+        description: Surrogate PK generated with ROW_NUMBER() — uniquely identifies one player appearance.
         tests: [not_null, unique]
       - name: match_id
-        description: "FK to stg_raw__match.match_id."
+        description: FK to stg_raw__match.match_id — identifies the match this lineup entry belongs to.
         tests:
           - not_null
           - relationships:
@@ -311,7 +360,7 @@ models:
                 to: ref('stg_raw__match')
                 field: match_id
       - name: team_api_id
-        description: "FK to stg_raw__team.team_api_id."
+        description: FK to stg_raw__team.team_api_id — identifies the team the player represented in this match.
         tests:
           - not_null
           - relationships:
@@ -319,7 +368,7 @@ models:
                 to: ref('stg_raw__team')
                 field: team_api_id
       - name: player_api_id
-        description: "FK to stg_raw__player.player_api_id."
+        description: FK to stg_raw__player.player_api_id — identifies the player in this lineup entry.
         tests:
           - not_null
           - relationships:
@@ -327,10 +376,13 @@ models:
                 to: ref('stg_raw__player')
                 field: player_api_id
       - name: is_home
-        description: "TRUE if the player belongs to the home team, FALSE if away."
+        description: Boolean flag — TRUE if the player belongs to the home team, FALSE if away.
         tests: [not_null]
       - name: position_number
-        description: "Position in the lineup (1-11)."
+        description: >
+          Player's position number within the lineup (1–11).
+          Position 1 = goalkeeper. Sourced from the column suffix
+          in the original home_player_N / away_player_N columns.
         tests:
           - not_null
           - accepted_values:
