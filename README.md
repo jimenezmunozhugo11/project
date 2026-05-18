@@ -47,20 +47,19 @@ football_project/
 │
 ├── models/
 │   ├── staging/                            ← Silver layer (views)
-│   │   ├── _sources.yml                    ← Source declarations (loaded SQLite tables)
-│   │   ├── _models.yml                     ← Staging tests and documentation
-│   │   ├── stg_country.sql
-│   │   ├── stg_league.sql
-│   │   ├── stg_season.sql
-│   │   ├── stg_team.sql
-│   │   ├── stg_team_attributes.sql
-│   │   ├── stg_match.sql
-│   │   ├── stg_player.sql
-│   │   ├── stg_player_attributes.sql
-│   │   └── mart_team_season_stats.sql      ← Aggregated statistics by team and season
+│   │   ├── _raw__sources.yml               ← Source declarations (loaded SQLite tables)
+│   │   ├── _raw__models.yml                ← Staging tests and documentation
+│   │   ├── stg_raw__country.sql
+│   │   ├── stg_raw__league.sql
+│   │   ├── stg_raw__season.sql
+│   │   ├── stg_raw__team.sql
+│   │   ├── stg_raw__team_attributes.sql
+│   │   ├── stg_raw__match.sql
+│   │   ├── stg_raw__player.sql
+│   │   ├── stg_raw__player_attributes.sql
 │   │
 │   └── marts/                              ← Gold layer (tables — star schema)
-│       ├── _models.yml                     ← Marts tests and documentation
+│       ├── _core__models.yml               ← Marts tests and documentation
 │       ├── dim_date.sql                    ← Calendar dimension
 │       ├── dim_team.sql                    ← Team dimension
 │       ├── dim_league.sql                  ← League dimension
@@ -118,10 +117,6 @@ The project implements a **star schema** in the Gold layer with two fact tables 
 |---|---|---|
 | `fct_match_result` | Match | Result, goals, home/away teams, league, and season |
 | `fct_team_season_stats` | Team × Season | Aggregated statistics: matches played, wins, draws, losses, goals scored/conceded, points |
-
-### Staging Layer (Silver)
-
-The 9 staging tables replicate and clean the source tables. `mart_team_season_stats` is an intermediate table that aggregates statistics by team and season within the Silver layer and serves as the base for `fct_team_season_stats`.
 
 ---
 
